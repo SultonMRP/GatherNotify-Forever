@@ -1,0 +1,12 @@
+## Interface: 120100, 16001
+## Title: GatherNotify
+## Notes: Required gather skill on herb/mine/skin world tooltips, skill-up unlocks, and clearer "Requires" errors.
+## Author: Foxthorn
+## Version: 1.8.3
+## X-Date: November 13, 2026
+## IconTexture: Interface\Icons\INV_Pick_02
+## Category-enUS: Professions
+## OptionalDeps: TooltipKit
+## AllowLoadGameType: camelot, mainline
+
+GatherNotify.lua
