@@ -289,8 +289,11 @@ function GatherNotify.OnEvent(self, event, ...)
 	if event == "ADDON_LOADED" then
 		local addon_name = ...
 		if addon_name == ADDON_NAME then
+			GatherNotify.InitDB()
+			GatherNotify.RegisterOptions()
 			GatherNotify.InstallHooks()
 			GatherNotify.SnapshotRanks()
+			GatherNotify.MinimapButton()
 		end
 	elseif event == "SKILL_LINES_CHANGED" or event == "TRADE_SKILL_LIST_UPDATE" then
 		GatherNotify.CheckSkillUps()
@@ -308,6 +311,7 @@ function GatherNotify.OnEvent(self, event, ...)
 		GatherNotify.CheckSkillUps()
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		GatherNotify.SnapshotRanks()
+		GatherNotify.MinimapButton()
 	elseif event == "UI_ERROR_MESSAGE" then
 		local a, b = ...
 		local err, errtype = b, a
@@ -318,31 +322,162 @@ function GatherNotify.OnEvent(self, event, ...)
 	end
 end
 
-function GatherNotify.OnCommand(cmd)
-	cmd = tostring(cmd or ""):lower()
+function GatherNotify.InitDB()
+	if type(GatherNotifyDB) ~= "table" then
+		GatherNotifyDB = {}
+	end
+	if GatherNotifyDB.showOtherProfessions == nil then
+		GatherNotifyDB.showOtherProfessions = false
+	end
+end
 
-	if #cmd > 0 then
-		for i = 0, 8 do
-			if cmd == string.sub("skinning", 1, -i - 1) then
-				GatherNotify.PrintHighestNode("skinning")
-				return
-			elseif cmd == string.sub("mining", 1, -i - 1) then
-				GatherNotify.PrintHighestNode("mining")
-				return
-			elseif cmd == string.sub("herbalism", 1, -i - 1) then
-				GatherNotify.PrintHighestNode("herbalism")
-				return
-			elseif cmd == string.sub("version", 1, -i - 1) then
-				GatherNotify.Msg(format("GatherNotify version: |cff1aff1a%s|cffFFC300 (%s)", AddonMeta("Version") or "?", AddonMeta("X-Date") or "?"), true)
-				return
+function GatherNotify.WantsProfessionTip(name)
+	if type(GatherNotifyDB) == "table" and GatherNotifyDB.showOtherProfessions then
+		return true
+	end
+	return GatherNotify.GetProfessionLevel(name) ~= nil
+end
+
+local optionsCategory
+
+function GatherNotify.RegisterOptions()
+	GatherNotify.InitDB()
+	if not Settings or not Settings.RegisterVerticalLayoutCategory or not Settings.RegisterAddOnSetting or not Settings.CreateCheckbox then
+		return
+	end
+	local category = Settings.RegisterVerticalLayoutCategory("GatherNotify")
+	local setting = Settings.RegisterAddOnSetting(category, "GatherNotify_showOtherProfessions", "showOtherProfessions", GatherNotifyDB, "boolean", "Show other professions", false)
+	Settings.CreateCheckbox(category, setting, "Show Herbalism, Mining, and Skinning requirement lines even for professions you do not have.")
+	Settings.RegisterAddOnCategory(category)
+	optionsCategory = category
+end
+
+function GatherNotify.OpenOptions()
+	if optionsCategory and Settings and Settings.OpenToCategory and optionsCategory.GetID then
+		Settings.OpenToCategory(optionsCategory:GetID())
+		return
+	end
+	GatherNotify.InitDB()
+	GatherNotifyDB.showOtherProfessions = not GatherNotifyDB.showOtherProfessions
+	GatherNotify.Msg("Show other professions: " .. (GatherNotifyDB.showOtherProfessions and "on" or "off"), true)
+end
+
+function GatherNotify.ReportLines()
+	local lines = {}
+	for _, skill in ipairs({ "mining", "herbalism", "skinning" }) do
+		local level, temp = GatherNotify.GetProfessionLevel(skill)
+		if level then
+			temp = temp or 0
+			local effective = level + temp
+			local nodes = GatherNotify.GetHighestNode(skill, effective) or "?"
+			local label = skill:gsub("^%l", string.upper)
+			if skill == "skinning" then
+				lines[#lines + 1] = label .. " " .. effective .. ": level " .. nodes .. " creatures"
+			else
+				lines[#lines + 1] = label .. " " .. effective .. ": " .. nodes
 			end
 		end
 	end
+	if #lines == 0 then
+		lines[1] = "No gathering professions."
+	end
+	return lines
+end
 
-	GatherNotify.Msg("/gn skinning - Print highest level creature you can skin", true)
-	GatherNotify.Msg("/gn mining - Print highest node you can mine", true)
-	GatherNotify.Msg("/gn herbalism - Print highest herb you can pick", true)
-	GatherNotify.Msg("/gn version - Prints addon version", true)
+function GatherNotify.Report()
+	for _, line in ipairs(GatherNotify.ReportLines()) do
+		GatherNotify.Msg(line, true)
+	end
+end
+
+local minimapButton
+
+local function MinimapButtonPosition()
+	if not minimapButton then
+		return
+	end
+	GatherNotify.InitDB()
+	local angle = tonumber(GatherNotifyDB.minimapAngle) or 3.9
+	local radius = (Minimap:GetWidth() / 2) + 5
+	minimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+end
+
+function GatherNotify.MinimapButton()
+	if minimapButton or not Minimap then
+		MinimapButtonPosition()
+		return
+	end
+	GatherNotify.InitDB()
+	local button = CreateFrame("Button", "GatherNotifyMinimapButton", Minimap)
+	button:SetSize(31, 31)
+	button:SetFrameStrata("MEDIUM")
+	button:SetFrameLevel(8)
+	button:RegisterForClicks("LeftButtonUp")
+	button:RegisterForDrag("LeftButton")
+	button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+	local icon = button:CreateTexture(nil, "BACKGROUND")
+	icon:SetSize(20, 20)
+	icon:SetPoint("CENTER", 0, 1)
+	icon:SetTexture("Interface\\Icons\\INV_Pick_02")
+	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+	local border = button:CreateTexture(nil, "OVERLAY")
+	border:SetSize(53, 53)
+	border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+	border:SetPoint("TOPLEFT")
+
+	button:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:SetText("GatherNotify", 1, 0.82, 0)
+		for _, line in ipairs(GatherNotify.ReportLines()) do
+			GameTooltip:AddLine(line, 1, 0.76, 0.19, true)
+		end
+		GameTooltip:AddLine("Click to open options", 0.7, 0.7, 0.7, true)
+		GameTooltip:Show()
+	end)
+	button:SetScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
+	button:SetScript("OnClick", function()
+		GatherNotify.OpenOptions()
+	end)
+	button:SetScript("OnDragStart", function(self)
+		self:SetScript("OnUpdate", function()
+			local mx, my = Minimap:GetCenter()
+			local cx, cy = GetCursorPosition()
+			local scale = Minimap:GetEffectiveScale()
+			if not mx or not scale or scale == 0 then
+				return
+			end
+			cx, cy = cx / scale, cy / scale
+			GatherNotifyDB.minimapAngle = math.atan2(cy - my, cx - mx)
+			MinimapButtonPosition()
+		end)
+	end)
+	button:SetScript("OnDragStop", function(self)
+		self:SetScript("OnUpdate", nil)
+	end)
+
+	minimapButton = button
+	MinimapButtonPosition()
+end
+
+function GatherNotify.OnCommand(cmd)
+	cmd = strtrim(tostring(cmd or "")):lower()
+	if cmd == "" or cmd == "options" then
+		GatherNotify.OpenOptions()
+		return
+	end
+	if cmd == "report" then
+		GatherNotify.Report()
+		return
+	end
+	if cmd == "version" then
+		GatherNotify.Msg(format("GatherNotify version: |cff1aff1a%s|cffFFC300 (%s)", AddonMeta("Version") or "?", AddonMeta("X-Date") or "?"), true)
+		return
+	end
+	GatherNotify.OpenOptions()
 end
 
 function GatherNotify.HandleUIError(errtype, err)
@@ -594,6 +729,8 @@ function GatherNotify.GetProfessionLevel(name)
 	local wantLine = SKILL_LINE[canon]
 
 	if type(GetProfessions) == "function" and type(GetProfessionInfo) == "function" then
+		-- This list is only professions the character still has. Do not fall through
+		-- to the skill-line API, which can still describe one that was dropped.
 		local p1, p2, archaeology, fishing, cooking, firstAid = GetProfessions()
 		for _, index in ipairs({ p1, p2, archaeology, fishing, cooking, firstAid }) do
 			if index then
@@ -607,6 +744,7 @@ function GatherNotify.GetProfessionLevel(name)
 				end
 			end
 		end
+		return
 	end
 
 	if C_TradeSkillUI and C_TradeSkillUI.GetProfessionInfoBySkillLineID and wantLine then
@@ -938,7 +1076,7 @@ local function ApplyTooltip(tooltip, data, opts, s)
 	end
 
 	local rewritten
-	if skillname then
+	if skillname and GatherNotify.WantsProfessionTip(skillname) then
 		local req = GatherNotify.GetRequiredLevel(skillname, objname)
 		if req then
 			local line = LeftFontString(tooltip, linenum)
@@ -959,7 +1097,7 @@ local function ApplyTooltip(tooltip, data, opts, s)
 	if names and not IsItemDataType(dataType) and not (opts and opts.rewriteOnly) then
 		s.busy = true
 		for _, info in ipairs(names) do
-			if not HasRequireLine(tooltip, info.skill, info.req) then
+			if GatherNotify.WantsProfessionTip(info.skill) and not HasRequireLine(tooltip, info.skill, info.req) then
 				local label = ProfessionLabel(info.skill)
 				local text, _, r, g, b = RequireText(label, info.req)
 				pcall(tooltip.AddLine, tooltip, text, r, g, b, true)

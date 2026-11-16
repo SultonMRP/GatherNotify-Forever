@@ -2,7 +2,9 @@
 
 Required Mining, Herbalism, and Skinning on world herb, vein, and skin tooltips for WoW Forever, plus a chat line when a node rank unlocks.
 
-Version 1.8.3. Slash: `/gn`, `/gathernotify`, `/gnotify`.
+Version 1.8.4. `/gn` opens options. `/gn report` prints one line for each gathering profession you still have.
+
+A pickaxe button on the minimap shows that same report. Click it to open options. **Show other professions** adds Herbalism, Mining, and Skinning lines for professions you do not have.
 
 ## TooltipKit
 
