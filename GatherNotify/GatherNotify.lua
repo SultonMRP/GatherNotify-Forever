@@ -329,6 +329,13 @@ function GatherNotify.InitDB()
 	if GatherNotifyDB.showOtherProfessions == nil then
 		GatherNotifyDB.showOtherProfessions = false
 	end
+	if GatherNotifyDB.showNodeTooltip == nil then
+		GatherNotifyDB.showNodeTooltip = true
+	end
+end
+
+function GatherNotify.NodeTooltipEnabled()
+	return type(GatherNotifyDB) ~= "table" or GatherNotifyDB.showNodeTooltip ~= false
 end
 
 function GatherNotify.WantsProfessionTip(name)
@@ -346,6 +353,8 @@ function GatherNotify.RegisterOptions()
 		return
 	end
 	local category = Settings.RegisterVerticalLayoutCategory("GatherNotify")
+	local nodeTip = Settings.RegisterAddOnSetting(category, "GatherNotify_showNodeTooltip", "showNodeTooltip", GatherNotifyDB, "boolean", "Enable node tooltip", true)
+	Settings.CreateCheckbox(category, nodeTip, "Add Herbalism, Mining, and Skinning requirement lines. Turn this off when another addon already shows node levels.")
 	local setting = Settings.RegisterAddOnSetting(category, "GatherNotify_showOtherProfessions", "showOtherProfessions", GatherNotifyDB, "boolean", "Show other professions", false)
 	Settings.CreateCheckbox(category, setting, "Show Herbalism, Mining, and Skinning requirement lines even for professions you do not have.")
 	Settings.RegisterAddOnCategory(category)
@@ -1032,6 +1041,9 @@ local function CollectNodeNames(tooltip, title)
 end
 
 local function ApplyTooltip(tooltip, data, opts, s)
+	if not GatherNotify.NodeTooltipEnabled() then
+		return
+	end
 	local hasLines
 	if type(data) == "table" then
 		Surface(data)

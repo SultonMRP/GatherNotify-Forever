@@ -2,7 +2,7 @@
 ## Title: GatherNotify
 ## Notes: Required gather skill on herb/mine/skin world tooltips, skill-up unlocks, and clearer "Requires" errors.
 ## Author: Foxthorn
-## Version: 1.8.4
+## Version: 1.8.5
 ## SavedVariables: GatherNotifyDB
 ## X-Date: November 16, 2026
 ## IconTexture: Interface\Icons\INV_Pick_02
